@@ -1,6 +1,9 @@
 import flet as ft
 import asyncio
 import aiohttp
+from typing import List, Any, Dict
+import asyncio
+from typing import Awaitable
 
 pokemon_actual = 0
 
@@ -9,7 +12,6 @@ async def move_pokemon_image(image):
         # Mueve la imagen hacia abajo (incrementa la posición Y)
         image.top += 6
         await asyncio.sleep(0.1)  # Espera antes de actualizar
-
         # Mueve la imagen hacia arriba (decrementa la posición Y)
         image.top -= 6
         await asyncio.sleep(0.1)  # Espera antes de actualizar
@@ -18,41 +20,61 @@ async def main(page: ft.Page):
     ## Inicializamos la ventana
     page.window_width = 720
     page.window_height = 1280
-    page.window_resizable = False
+    page.window_resizable = True
     page.padding = 0
     page.margin = 0
     page.fonts = {
         "zpix": "https://github.com/SolidZORO/zpix-pixel-font/releases/download/v3.1.8/zpix.ttf"
     }
-    page.theme = ft.Theme(font_family="zpix")
-    
-    ## Funciones del programa:
-    async def peticion(url):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                return await response.json()
-    
-    async def evento_get_pokemon(e: ft.ContainerTapEvent):
-        global pokemon_actual
-        if e.control == flecha_superior:
-            pokemon_actual += 1
-        else:
-            pokemon_actual -=1
-        numero = (pokemon_actual%150)+1
-        resultado = await peticion(f"https://pokeapi.co/api/v2/pokemon/{numero}")
+    page.title = "Pykedex"
+    page.scroll = ft.ScrollMode.ALWAYS
+    page.theme_mode = ft.ThemeMode.LIGHT
+    await page.update_async()
 
-        datos = f"Number:{numero}\nName: {resultado['name']}\n\nAbilities:"
-        for elemento in resultado['abilities']:
-            
-            habilidad = elemento['ability']['name']
-            datos += f"\n{habilidad}"
-        datos += f"\n\nHeight: {resultado['height']}"
+    ## Funciones del programa:
+    async def peticion(url: str) -> Dict[str, Any]:
+        """
+        Sends an asynchronous GET request to the specified URL using aiohttp.ClientSession.
+        Args:
+            url (str): The URL to send the GET request to.
+        Returns:
+            dict: The JSON response from the GET request.
+        """
+        async with aiohttp.ClientSession() as session:
+            response = await session.get(url)
+            return await response.json()
+    
+
+    async def evento_get_pokemon(e: ft.ContainerTapEvent) -> None:
+        """
+        Fetches Pokemon data based on the given event.
+        Args:
+            e (ft.ContainerTapEvent): The event containing the control information.
+        Returns:
+            None
+        """
+        global pokemon_actual
+        pokemon_actual += 1 if e.control == flecha_superior else -1
+        numero = (pokemon_actual % 1008) + 1
+        resultado1, resultado2 = await asyncio.gather(
+            peticion(f"https://pokeapi.co/api/v2/pokemon/{numero}"),
+            peticion(f"https://pokeapi.co/api/v2/pokemon-species/{numero}")
+        )
+        types: List[str] = [t['type']['name'] for t in resultado1['types']]
+        types_string: str = ' / '.join(types)
+        datos: str = f"Number:{numero}\nName: {resultado1['name']}\nType: {types_string}\n"
+        datos += f"Description: {resultado2['flavor_text_entries'][0]['flavor_text']}".replace("\n", " ")
         texto.value = datos
-        sprite_url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{numero}.png"
+        sprite_url: str = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{numero}.png"
         imagen.src = sprite_url
         await page.update_async()
 
-    async def blink():
+    async def blink() -> Awaitable[None]:
+        """
+        Asynchronously blinks the blue light.
+        Returns:
+            Awaitable[None]: A future representing the completion of the blink operation.
+        """
         while True:
             await asyncio.sleep(1)
             luz_azul.bgcolor = ft.colors.BLUE_100
@@ -71,8 +93,6 @@ async def main(page: ft.Page):
         ]
     )
 
-  
-
     items_superior = [
         ft.Container(boton_azul, width=80, height=80),
         ft.Container(width=40, height=40, bgcolor=ft.colors.RED_200, border_radius=50),
@@ -89,8 +109,7 @@ async def main(page: ft.Page):
                 right=550/2,
     )
     
-    
-    
+     
     stack_central = ft.Stack(
         [
             ft.Container(width=600, height=400, bgcolor=ft.colors.WHITE, border_radius=20),
@@ -99,7 +118,6 @@ async def main(page: ft.Page):
         ]
     )
 
-    
     triangulo = ft.canvas.Canvas([
         ft.canvas.Path(
                 [
@@ -127,11 +145,16 @@ async def main(page: ft.Page):
         ]
     )
 
-   
     texto = ft.Text(
         value="...",
         color=ft.colors.BLACK,
-        size=22,
+        size=19,
+        font_family="zpix",
+        width=400,
+        height=300,
+        
+        
+        
     )
 
     items_inferior = [
@@ -162,5 +185,11 @@ async def main(page: ft.Page):
     
     
 
+import flet_fastapi
+# ft.app(target=main, host="127.0.0.1", port=8000)
+app = flet_fastapi.app(main)
 
-ft.app(target=main)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run('main:app',reload=True)
